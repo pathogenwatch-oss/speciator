@@ -1,0 +1,2 @@
+../../Mashes_new//GCF_002261065.1_ASM226106v1_genomic.fna.gz.msh
+../../Mashes_new//GCF_000428585.1_ASM42858v1_genomic.fna.gz.msh

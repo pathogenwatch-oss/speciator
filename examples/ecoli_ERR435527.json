@@ -1,0 +1,15 @@
+{
+  "taxId": "624",
+  "speciesId": "624",
+  "speciesName": "Shigella sonnei",
+  "genusId": "620",
+  "genusName": "Shigella",
+  "superkingdomId": "2",
+  "superkingdomName": "Bacteria",
+  "referenceId": "Escherichia_coli/0231.fna.gz",
+  "mashDistance": 0.0104835,
+  "pValue": 0.0,
+  "matchingHashes": "670/1000",
+  "confidence": "uncertain",
+  "source": "Curated"
+}
