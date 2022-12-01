@@ -44,7 +44,7 @@ merge_sets = {
 }
 skip_genus = set().union(*merge_sets.values())
 
-taxon_data = pandas.read_parquet('data/taxon_info.pqt').rename_axis('taxid').fillna('NoGenus')
+taxon_data = pandas.read_parquet('data/taxon_info.pqt').rename_axis('taxid').fillna('NoGenus').drop(['species_name', 'species_code'], axis=1)
 all_strains = pandas.read_parquet('data/all_complete_refseq.k21s1000.species.pqt').astype({'taxid': int}).set_index(
     'taxid')
 

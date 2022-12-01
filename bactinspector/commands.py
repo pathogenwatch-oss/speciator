@@ -46,8 +46,8 @@ def sample_and_refseq_species_info(args):
     else:
         all_bacterial_refseq_sketches = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data',
                                                      'all_complete_bacteria_refseq.k21s1000.msh')
-    sample_matches = [get_best_mash_matches(sample_sketch, all_bacterial_refseq_sketches,
-                                            refseq_species_info, args.output_dir, mash_path) for sample_sketch in
+    sample_matches = [get_best_mash_matches(sample_sketch, all_bacterial_refseq_sketches, mash_path,
+                                            args.num_best_matches, args.distance_cutoff) for sample_sketch in
                       sketch_files]
     return sample_matches, refseq_species_info
 
@@ -230,6 +230,9 @@ def run_create_species_info(args):
          'refseq_organism_name', 'refseq_full_organism_name', 'bacsort_organism_name', 'curated_organism_name', 'taxid',
          'species_taxid', 'bioproject', 'biosample', 'refseq_category', 'infraspecific_name', 'assembly_level',
          'asm_name', 'submitter', 'ftp_path']]
+
+    keep_columns = ['filename', 'taxid', 'curated_organism_name']
+    merged_with_bacsort = merged_with_bacsort[keep_columns]
 
     # write out file
     merged_with_bacsort.astype({'num_contigs': int}).to_parquet(

@@ -50,7 +50,7 @@ def build_pw_result(result_df, species_datafile, lib_name):
         else:
             strain_id = result['strain_taxid']
         species_md.fillna(value='', inplace=True)
-        print(f"Strain ID: {strain_id}; superkingdom_code: {species_md['superkingdom_code']}", file=sys.stderr)
+        # print(f"Strain ID: {strain_id}; superkingdom_code: {species_md['superkingdom_code']}", file=sys.stderr)
         return {
             'taxId': strain_id,
             'speciesId': species_md['species_code'],
@@ -68,9 +68,9 @@ def build_pw_result(result_df, species_datafile, lib_name):
         }
 
 
-def run_mass_search(num_best_matches=20):
+def run_mass_search(num_best_matches=20, taxon_info='bactinspector/data/taxon_info.pqt'):
     # Initial filter
-    print(f'Running filter search', file=sys.stderr)
+    # print(f'Running filter search', file=sys.stderr)
     filter_result = build_pw_result(commands.run_check_species(
         AttributeDict({'distance_cutoff': 0.15,
                        'fasta_file_pattern': fasta_file,
@@ -83,7 +83,7 @@ def run_mass_search(num_best_matches=20):
                        'mash_path': '',
                        'allowed_variance': 0.1,
                        'allowed_variance_rarer_species': 0.5
-                       })), 'data/taxon_info.pqt', 'filter')
+                       })), taxon_info, 'filter')
 
     genus = filter_result['genusName'].replace(' ', '_') if filter_result['genusName'] != 'Unclassified' else 'NoGenus'
 
@@ -109,7 +109,7 @@ def run_mass_search(num_best_matches=20):
     else:
         library, threshold = genus, 0.05
 
-    print(f'Library={library}, threshold={threshold}, num_best_matches={num_best_matches}', file=sys.stderr)
+    # print(f'Library={library}, threshold={threshold}, num_best_matches={num_best_matches}', file=sys.stderr)
 
     library_file = f'{libraries_path}/{library}.k21s1000'
 
@@ -149,6 +149,7 @@ def run_mass_search(num_best_matches=20):
 
 fasta_path = sys.argv[1]
 libraries_path = sys.argv[2]
+taxon_info = sys.argv[3]
 
 # print(f'Running {fasta_path} against {libraries_path}\n', file=sys.stderr)
 input_dir = os.path.dirname(fasta_path)
@@ -171,8 +172,8 @@ species_assignment = commands.run_check_species(
                    }))
 tag = 'Curated'
 if species_assignment.iloc[0]['species'] == 'No significant matches' or species_assignment.iloc[0][
-      'species'] == 'Escherichia coli':
-    species_assignment, tag = run_mass_search()
+      'species'] in ['Escherichia coli', 'Shigella sonnei', 'Shigella flexneri']:
+    species_assignment, tag = run_mass_search(taxon_info=taxon_info)
 
-json_result = build_pw_result(species_assignment, 'bactinspector/data/taxon_info.pqt', tag)
+json_result = build_pw_result(species_assignment, taxon_info, tag)
 print(json.dumps(json_result), file=sys.stdout)
