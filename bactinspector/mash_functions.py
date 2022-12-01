@@ -17,7 +17,7 @@ def run_mash_sketch(file, filetype, output_dir=None, mash_path=''):
         sketch_file = add_new_file_extension(file, 'msh')
 
     if not os.path.exists(sketch_file) or os.path.getsize(sketch_file) == 0:
-        sys.stderr.write('Sketching {0}\n'.format(get_base_name(file)))
+        # sys.stderr.write('Sketching {0}\n'.format(get_base_name(file)))
         if filetype == 'fasta':
             command_and_arguments = [os.path.join(mash_path, 'mash'), 'sketch', file, '-o', sketch_file]
         else:
@@ -50,12 +50,12 @@ def get_best_mash_matches(sample_sketch, ref_seq_sketch, mash_path='', number_of
 
 
 def execute_mashing(mash_path, ref_seq_sketch, sample_sketch, distance_threshold):
-    sys.stderr.write(f'Getting best match for {get_base_name(sample_sketch)}\n')
+    # sys.stderr.write(f'Getting best match for {get_base_name(sample_sketch)}\n')
     # time1 = time.process_time()
     command_and_arguments = [os.path.join(mash_path, 'mash'), 'dist', '-d', str(distance_threshold), sample_sketch,
                              ref_seq_sketch]
 
-    print(command_and_arguments, file=sys.stderr)
+    # print(command_and_arguments, file=sys.stderr)
     # result = subprocess.run(command_and_arguments, stdout=subprocess.PIPE, stderr=True, text=True)
     ret_code, out, err = run_command(command_and_arguments, text=True)
     if ret_code != 0:

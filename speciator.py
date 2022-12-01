@@ -156,7 +156,7 @@ input_dir = os.path.dirname(fasta_path)
 fasta_file = os.path.basename(fasta_path)
 
 # Curated library search
-print(f'Running curated library search', file=sys.stderr)
+# print(f'Running curated library search', file=sys.stderr)
 species_assignment = commands.run_check_species(
     AttributeDict({'distance_cutoff': 0.04,
                    'fasta_file_pattern': fasta_file,
