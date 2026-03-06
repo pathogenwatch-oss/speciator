@@ -1,0 +1,25 @@
+[thresholds]
+Curated = 0.05
+Kleborate = 0.04
+Bacteria = 0.05
+Influenza = 0.08
+Viruses = 0.075
+Fungi = 0.075
+Archaea = 0.05
+
+[num_matches]
+Curated = 1
+Kleborate = 1
+Bacteria = 10
+Influenza = 10
+Viruses = 10
+Fungi = 10
+Archaea = 10
+
+[paths]
+library = "./library"
+mash = "mash"
+
+[parameters]
+sketch_extension = ".msh"
+info_extension = ".pqt"

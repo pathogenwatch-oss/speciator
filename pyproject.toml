@@ -1,0 +1,43 @@
+[project]
+name = "speciator"
+version = "5.0.0rc3"
+description = "A fast tool for assigning species to fungal, bacterial, and viral genomes.."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "polars>=1.33.1",
+    "pyarrow>=21.0.0",
+    "pytest>=8.4.2",
+    "scikit-learn>=1.7.2",
+    "tenacity>=9.1.2",
+    "toml>=0.10.2",
+    "typer>=0.19.1",
+]
+
+[project.scripts]
+speciator-build-lib = "speciator.run_library_builder:app"
+speciator = "speciator.run_speciator:app"
+speciator-select-representatives = "speciator.select_representatives:app"
+speciator-lineages = "speciator.generate_lineages:app"
+speciator-cat-parquet = "speciator.cat_lineage_parquet:app"
+
+[tool.pytest.ini_options]
+addopts = "-s --no-header --no-summary"
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[build-system]
+requires = ["uv_build>=0.7.20,<0.8.0"]
+build-backend = "uv_build"
+
+[tool.pixi.workspace]
+channels = ["conda-forge", "bioconda"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[tool.pixi.pypi-dependencies]
+speciator = { path = ".", editable = true }
+
+[tool.pixi.tasks]
+
+[tool.pixi.dependencies]
+mash = ">=2.3,<3"

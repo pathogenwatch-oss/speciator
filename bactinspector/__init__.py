@@ -1,1 +1,0 @@
-from bactinspector import *

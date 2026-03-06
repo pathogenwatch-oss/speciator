@@ -1,0 +1,64 @@
+
+Bootstrap: docker
+From: ghcr.io/astral-sh/uv:python3.13-bookworm-slim
+
+%files
+    src /speciator/src
+    uv.lock /speciator/
+    pyproject.toml /speciator/
+    config.toml /speciator/
+    LICENSE.md /speciator/
+    README.md /speciator/
+    library /speciator/library
+    speciator.runscript.sh /speciator/
+
+%post
+    # Install dash (provides /bin/sh) first
+    apt update
+    apt install -y dash curl --no-install-recommends
+
+    # Build stage equivalent
+    cd /speciator
+    uv build --wheel
+    rm -rf src
+
+    # Install Mash
+    curl -L https://github.com/marbl/Mash/releases/download/v2.3/mash-Linux64-v2.3.tar | tar xv --no-same-owner
+    mv mash-Linux64-v2.3/mash /usr/bin/
+    rm -rf mash-Linux64-v2.3
+
+    # Install speciator wheel (using wildcard to avoid hardcoding version)
+    uv pip install --system --no-cache-dir /speciator/dist/*.whl
+    rm -rf /speciator/dist
+
+    # Make the runscript executable
+    chmod +x /speciator/speciator.runscript.sh
+
+    # Clean up
+    rm -rf /var/lib/apt/lists/*
+
+%environment
+    export PATH=/usr/bin:$PATH
+    export SPECIATOR_CONFIG=/speciator/config.toml
+    export SPECIATOR_LIBRARY=/speciator/library
+
+%runscript
+    exec /speciator/speciator.runscript.sh "$@"
+
+%labels
+    Author Centre for Genomic Pathogen Surveillance (CGPS)
+    Version 5.0.0a0
+    Description Microbial species identification tool using mash comparison
+
+%help
+    This container runs Speciator, a tool for microbial species identification.
+
+    Usage:
+        singularity run speciator.sif [arguments]
+
+    The container includes:
+    - Speciator Python package
+    - Mash tool for sequence comparison
+    - Pre-built reference library
+
+    For more information, see the README.md file or visit the project repository.
