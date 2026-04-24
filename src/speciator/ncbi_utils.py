@@ -253,7 +253,6 @@ def read_kingdom_metadata(
     def refseq_filter(query_genome: dict[str, str]) -> bool:
         if (
             query_genome["assembly_level"] == "Transcriptome"
-            # query_genome["assembly_level"] != "Complete Genome"
             or query_genome["ftp_path"] == "na"
         ):
             return False

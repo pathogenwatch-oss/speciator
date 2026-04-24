@@ -138,6 +138,13 @@ def mash_polars(mash_path, ref_seq_sketch, sample_sketch, distance_threshold, th
             separator="\t",
             has_header=False,
             new_columns=["query", "subject", "distance", "p-value", "shared-hashes"],
+            schema_overrides={
+                "query": pl.Utf8,
+                "subject": pl.Utf8,
+                "distance": pl.Float64,
+                "p-value": pl.Float64,
+                "shared-hashes": pl.Utf8,
+            },
         ).sort("distance", descending=False)
 
         logger.info(f"mash_polars rows returned: {mash_dists.height}")

@@ -172,9 +172,6 @@ e.g. with Kleborate
 > speciator-build-lib -L debug full v3.2.4 2>&1 | tee logs.out
 ```
 
-To limit NCBI extraction by assembly level, use `--ncbi-extraction-level` (or `-x`) with one of `complete`,
-`chromosome`, `scaffold`, or `contig`.
-
 ### Library build commands and options
 
 `speciator-build-lib` is a Typer CLI with global options and subcommands.
@@ -184,10 +181,20 @@ Global options (apply to all subcommands):
 - `-c, --config-file` (default: `config.toml`) TOML config with thresholds.
 - `-m, --mash-path` (default: `mash`) path to the `mash` executable.
 - `-t, --taxonkit-path` (default: `taxonkit`) path to the `taxonkit` executable.
-- `-b, --build-dir` (default: `build_space`) working directory for intermediate files.
-- `-o, --out-dir` (default: `final`) output directory for final libraries.
+- `-b, --build-space-dir` (default: `build_space`) working directory for intermediate files.
+- `-o, --output-dir` (default: `final`) output directory for final libraries.
 - `-L, --log-level` (default: `WARNING`) logging level.
 - `-d, --download-threads` (default: `2`) download/sketch worker threads.
+- `-T, --search-threads` (default: CPU count) mash thread budget used during build-time distance calculations.
+- `--max-sub-library-size` (default: `25000`; `0` disables) maximum representatives per output mash sub-library for
+  NCBI-derived libraries.
+
+Library sharding:
+
+- `config.toml` supports `[parameters].max_sub_library_size`.
+- When set to a value `> 0`, NCBI-derived libraries can be emitted as shards: `Bacteria.1.msh/.pqt`,
+  `Bacteria.2.msh/.pqt`, etc.
+- Search automatically detects sharded libraries and aggregates shard matches before species assignment.
 
 Subcommands:
 
@@ -197,16 +204,24 @@ Subcommands:
   files.
 - `flu [--batch-size N] [--scaling-factor F] [--max-reps N] [DB_NAME]` (defaults: `500`, `0.005`, `2000`, db name:
   `Influenza`) builds the influenza library.
--
-
-`ncbi [--update-metadata] [--clean] [--qc-metrics FILE] [--batch-size N] [--cluster-threshold F] [--scaling-factor F] [--max-reps N] [--skip-unclassified] [--assembly-level/-A LEVEL]` (
-defaults: `filtered_metrics.csv`, `500`, `0.0000001`, `0.005`, `2000`, `contig`) builds the NCBI-derived libraries for
-bacteria, archaea, fungi, viruses.
-
--
-
-`full KLEBORATE_VERSION [--clean/-c] [--qc-metrics/-q FILE] [--batch-size/-b N] [--ncbi-scaling-factor/-s F] [--ncbi-max-reps/-m N] [--ncbi-extraction-level/-x LEVEL] [--flu-batch-size/-B N] [--flu-scaling-factor/-S F] [--flu-max-reps/-M N] [--curated-name NAME]`
+- `ncbi [--update-metadata] [--clean] [--qc-metrics FILE] [--batch-size N] [--cluster-threshold F] [--scaling-factor F] [--max-reps N] [--skip-unclassified]`
+  (defaults: `filtered_metrics.csv`, `500`, `0.0000001`, `0.005`, `2000`, `True`) builds the NCBI-derived libraries
+  for bacteria, archaea, fungi, viruses.
+- `full KLEBORATE_VERSION [--clean] [--qc-metrics FILE] [--batch-size N] [--ncbi-cluster-threshold F] [--ncbi-scaling-factor F] [--ncbi-max-reps N] [--ncbi-skip-unclassified] [--flu-batch-size N] [--flu-scaling-factor F] [--flu-max-reps N] [--curated-name NAME]`
+  (defaults: `filtered_metrics.csv`, `500`, `0.0001`, `0.1`, `2000`, `True`, `500`, `0.005`, `2000`, `Curated`)
 orchestrates `kleborate`, `curated`, `ncbi`, and `flu` in one run.
+
+### Split an existing large library into sub-libraries
+
+If you already have an oversized library (for example `Bacteria.msh/.pqt`) and the raw per-record sketches in
+`build_space/mash`, you can split it without a full rebuild:
+
+```bash
+speciator-split-library Bacteria --max-sub-library-size 50000 --library-dir library --build-space-dir build_space
+```
+
+By default, when writing in-place, the original files are archived to `Bacteria_full.msh/.pqt` after successful shard
+generation. Use `--keep-original` to keep the unsplit files in place.
 
 ## The search tool
 
@@ -215,9 +230,9 @@ orchestrates `kleborate`, `curated`, `ncbi`, and `flu` in one run.
 Global options (apply to all subcommands):
 
 - `-c, --config-file` (default: `config.toml`) configuration file.
-- `-l, --library-location` path to the library directory; overrides the config file value.
+- `-l, --library-dir` path to the library directory; overrides the config file value.
 - `-L, --log-level` (default: `WARNING`) logging level.
-- `-t, --threads` (default: `1`) thread count for search parallelisation.
+- `-P, --mash-processes` (default: `1`) number of parallel Mash search processes (one thread per process).
 - `--install-completion` install shell completion for the current shell.
 - `--show-completion` print shell completion for the current shell.
 
@@ -249,7 +264,7 @@ speciator fastq ESC_EB8749AA_AS_1.fastq.gz ESC_EB8749AA_AS_2.fastq.gz
 Override the library location from the config file.
 
 ```
-speciator --library-location /path/to/library fasta query.fasta
+speciator --library-dir /path/to/library fasta query.fasta
 ```
 
 ### Check the installed version
@@ -260,7 +275,59 @@ speciator version
 
 ## Configuring Speciator
 
-!TODO: Describe the config file
+Speciator uses a TOML configuration file (default: `config.toml`) for both search and library building.
+
+Top-level sections:
+
+- `[thresholds]`: Mash distance thresholds per logical library (for example `Curated`, `Kleborate`, `Bacteria`).
+  - Search uses these thresholds when comparing a query to each library.
+  - Build uses these as the per-library maximum thresholds for iterative representative selection.
+  - The order of entries controls library search order.
+- `[num_matches]`: Number of top mash hits retained per library during search.
+- `[paths]`:
+  - `library`: Directory containing library files (`.msh`, `.pqt`, `lineages.pqt`).
+  - `mash`: Path to the `mash` executable.
+- `[parameters]`:
+  - `sketch_extension`: Sketch file extension used by search (normally `.msh`).
+  - `info_extension`: Metadata parquet extension used by search (normally `.pqt`).
+  - `max_sub_library_size`: Max representatives per emitted NCBI shard during build (`0` disables sharding).
+
+Current example:
+
+```toml
+[thresholds]
+Curated = 0.05
+Kleborate = 0.04
+Bacteria = 0.05
+Influenza = 0.08
+Viruses = 0.075
+Fungi = 0.075
+Archaea = 0.05
+
+[num_matches]
+Curated = 1
+Kleborate = 1
+Bacteria = 10
+Influenza = 10
+Viruses = 10
+Fungi = 10
+Archaea = 10
+
+[paths]
+library = "./library"
+mash = "mash"
+
+[parameters]
+sketch_extension = ".msh"
+info_extension = ".pqt"
+max_sub_library_size = 0
+```
+
+Notes:
+
+- `speciator --library-dir` overrides `[paths].library` for search.
+- `speciator-build-lib` does not read `[paths].mash`; set the mash binary with `--mash-path`.
+- `speciator-build-lib --max-sub-library-size` sets build-time sharding directly.
 
 ## How it works
 
@@ -278,17 +345,51 @@ The sub-libraries are searched in order. If a match is obtained for one, then th
 
 #### Curated
 
+An in-house curated library of signatures for recognition of key species.
+
 #### Kleborate
+
+A Klebsiella-focussed library provided by [Kleborate](https://github.com/klebgenomics/Kleborate). Only Klebsiella and
+Salmonella matches are reported.
 
 #### Flu
 
+An in-house library of influenza A/B/G/D signatures, built using the same iterative method used for extracting
+representatives from the RefSeq/GenBank database [see below](#representative-selection-process).
+
 #### RefSeq/GenBank
 
-### The algorithm
+An automatically extracted library of representative genomes from RefSeq and GenBank, using an iterative clustering
+method.
+
+### Representative selection process
+
+1. The RefSeq and GenBank files for each kingdom are downloaded and processed kingdom-by-kingdom, and all
+   selected assemblies from RefSeq combined with complete genomes from GenBank are downloaded, sketched, and grouped by
+   species.
+    1. RefSeq: non-transcriptome records are eligible (subject to QC and other filters).
+    2. GenBank: only "Complete Genome" records are eligible (subject to the same filters).
+    3. Genome statistics are compared to pre-defined per-species thresholds (given in
+       [filtered_metrics.csv](filtered_metrics.csv)); failures are excluded. If no QC metric exists for a species, a
+       minimum genome-size fallback is used.
+    4. Duplicates between RefSeq and GenBank are identified via paired accessions, with RefSeq preferred.
+2. Identical, or near-identical, genomes are removed using an initial round of clustering and representative selection
+   for each species.
+    1. An all-v-all mash search is run, and the distances used to single linkage cluster the genomes.
+    2. The single linkage clusters are re-clustered using agglomerative clustering into complete linkage clusters.
+    3. For each complete cluster, the representative with the lowest average distance is selected.
+3. If any species still has more representatives than the defined maximum number of per-species representatives, then
+   the clustering and selection are repeated with increasingly relaxed thresholds until one of two conditions is met:
+    1. The number of representatives is now below the maximum allowed or,
+    2. The clustering threshold reaches the per-library maximum threshold used for search.
+   The iterative threshold starts at `config_threshold * scaling_factor` and is doubled each round (capped at
+   `config_threshold`). For NCBI, this iterative stage runs after an initial pass at `--cluster-threshold`.
+
+### The search algorithm
 
 1. The query sequence is compiled into a mash profile.
 2. It is then compared to each library in the order specified in the config file. The default order is:
-    1. Curated,
+    1. Curated
     2. Kleborate
     3. Bacteria
     4. Influenza
@@ -296,8 +397,7 @@ The sub-libraries are searched in order. If a match is obtained for one, then th
     6. Fungi
     7. Archaea
 3. If a match is found to a library, then the search is stopped and the result reported.
-4. If no match is found ...
-5. TODO
+4. If no match is found, then Speciator continues to the next library.
 
 ### The match process
 

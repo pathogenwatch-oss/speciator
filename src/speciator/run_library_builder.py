@@ -39,6 +39,7 @@ mash: str = "mash"
 taxonkit: str = "taxonkit"
 dwnld_threads: int = 2
 mash_threads: int = os.cpu_count()
+max_sub_library_size: int = 0
 data_paths: BuildSpace = BuildSpace.default()
 FLU_SPECIES = ["2955744", "2955935", "2955291", "2809131", "2955465"]
 config: dict[str, Any] = {}
@@ -72,6 +73,42 @@ def merge_parquet_files(parquet_files: list[Path], out_name: str) -> None:
     merged_df.write_parquet(output_path)
 
     logger.info(f"Merged {len(existing_files)} parquet files into {output_path}")
+
+
+def finalise_from_representatives(
+    library_name: str,
+    representatives: list[Genome],
+    records: list[RecordInfo],
+    db_metadata: dict[str, Lineage],
+    split_size: int = 0,
+) -> None:
+    if len(representatives) != len(records):
+        raise ValueError(
+            f"Representative count ({len(representatives)}) does not match record count ({len(records)})"
+        )
+
+    if split_size <= 0 or len(representatives) <= split_size:
+        db_path = data_paths.build_dir / f"{library_name}.msh"
+        paste_sketches(mash, [rep.sketch_path for rep in representatives], db_path)
+        data_paths.finalise_library(library_name, db_path, records, db_metadata)
+        move_files(data_paths.library_dir, library_name, data_paths.output_location)
+        return
+
+    n_shards = (len(representatives) + split_size - 1) // split_size
+    logger.info(
+        f"Splitting {library_name} into {n_shards} sub-libraries with max size {split_size}"
+    )
+    for shard_idx, start in enumerate(
+        range(0, len(representatives), split_size), start=1
+    ):
+        end = min(start + split_size, len(representatives))
+        shard_name = f"{library_name}.{shard_idx}"
+        shard_path = data_paths.build_dir / f"{shard_name}.msh"
+        reps_chunk = representatives[start:end]
+        records_chunk = records[start:end]
+        paste_sketches(mash, [rep.sketch_path for rep in reps_chunk], shard_path)
+        data_paths.finalise_library(shard_name, shard_path, records_chunk, db_metadata)
+        move_files(data_paths.library_dir, shard_name, data_paths.output_location)
 
 
 @app.command()
@@ -127,7 +164,7 @@ def kleborate(
 @app.command()
 def flu(
     batch_size: int = 500,
-    scaling_factor: float = 0.005,
+    scaling_factor: float = 0.05,
     max_reps: int = 2000,
     db_name: str = "Influenza",
 ):
@@ -470,8 +507,8 @@ def ncbi(
     clean: bool = False,
     qc_metrics_file: Path = Path("filtered_metrics.csv"),
     batch_size: int = 500,
-    cluster_threshold: float = 0.0000001,
-    scaling_factor: float = 0.005,
+    cluster_threshold: float = 0.0001,
+    scaling_factor: float = 0.1,
     max_reps: int = 2000,
     skip_unclassified: bool = True,
 ) -> None:
@@ -623,24 +660,25 @@ def ncbi(
             )
 
         logger.info(f"Building kingdom library for {kingdom}")
-        db_path, db_metadata = construct_lib(
-            kingdom.capitalize(), {kingdom: kingdom_species}, lineages, kingdom_reps
-        )
-        data_paths.finalise_library(
+        db_metadata = {
+            str(species): lineages[str(species)] for species in set(kingdom_species)
+        }
+        records = [
+            RecordInfo(
+                rep.assembly_accession,
+                rep.organism_taxid,
+                rep.assembly_accession,
+                cluster_sizes[idx],
+            )
+            for idx, rep in enumerate(kingdom_reps)
+        ]
+        finalise_from_representatives(
             kingdom,
-            db_path,
-            [
-                RecordInfo(
-                    rep.assembly_accession,
-                    rep.organism_taxid,
-                    rep.assembly_accession,
-                    cluster_sizes[idx],
-                )
-                for idx, rep in enumerate(kingdom_reps)
-            ],
+            kingdom_reps,
+            records,
             db_metadata,
+            split_size=max_sub_library_size,
         )
-        move_files(data_paths.library_dir, kingdom, data_paths.output_location)
     logger.info("Finalising lineages file")
     shutil.copy(data_paths.lineages_path, data_paths.output_location / "lineages.pqt")
 
@@ -722,21 +760,6 @@ def download_and_sketch(
                 logger.error(f"Error processing genome {original_key}: {str(e)}")
 
     return sketched_genomes
-
-
-def construct_lib(
-    db_tag: str,
-    db_to_species: dict[str, list[str]],
-    lineages: dict[str, Lineage],
-    reps: list[Genome],
-) -> tuple[Path, dict[str, Lineage]]:
-    logger.info(f"Building library for {db_tag}, with {len(reps)} genomes")
-    db_path = data_paths.build_dir / f"{db_tag}.msh"
-    paste_sketches(mash, [rep.sketch_path for rep in reps], db_path)
-    db_metadata = {
-        str(species): lineages[str(species)] for species in db_to_species[db_tag]
-    }
-    return db_path, db_metadata
 
 
 @app.command()
@@ -879,7 +902,7 @@ def main(
     build_dir: Annotated[
         Path,
         typer.Option(
-            "--build-dir",
+            "--build-space-dir",
             "-b",
             help="Directory for the build process",
             dir_okay=True,
@@ -889,7 +912,7 @@ def main(
     out_dir: Annotated[
         Path,
         typer.Option(
-            "--out-dir",
+            "--output-dir",
             "-o",
             help="Output directory for the final libraries",
             dir_okay=True,
@@ -921,6 +944,14 @@ def main(
             help="Number of threads for sketching genomes",
         ),
     ] = os.cpu_count(),
+    max_sub_library_size_override: Annotated[
+        Optional[int],
+        typer.Option(
+            "--max-sub-library-size",
+            help="Maximum representatives per output mash sub-library. 0 disables splitting.",
+            min=0,
+        ),
+    ] = 25000,
 ):
     global mash
     mash = mash_path
@@ -934,6 +965,13 @@ def main(
     mash_threads = search_threads
     global config
     config = toml.load(config_file)
+    global max_sub_library_size
+    configured_size = int(config.get("parameters", {}).get("max_sub_library_size", 25000))
+    max_sub_library_size = (
+        max_sub_library_size_override
+        if max_sub_library_size_override is not None
+        else configured_size
+    )
     global logger
     # Set up logging
     numeric_level = getattr(logging, log_level.upper(), None)
@@ -946,7 +984,8 @@ def main(
     )
 
     logger.info(f"Initializing with log level: {log_level}")
-    print(f"{str(data_paths)}", file=sys.stderr)
+    logger.info(f"Max sub-library size: {max_sub_library_size}")
+    logger.info(f"{str(data_paths)}")
 
 
 if __name__ == "__main__":

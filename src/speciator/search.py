@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
@@ -27,7 +28,7 @@ class SearchEnvironment:
     mash: str
     num_matches: dict[str, int]
     thresholds: dict[str, float]
-    threads: int
+    mash_processes: int
     sketch_extension: str = ".msh"
     info_extension: str = ".pqt"
     lineage_file: Path = field(init=False)
@@ -45,12 +46,12 @@ class SearchEnvironment:
             sketch_extension=".msh",
             info_extension=".pqt",
             thresholds={"superkingdom": 0.05},
-            threads=1,
+            mash_processes=1,
         )
 
     @staticmethod
     def from_config_file(
-        config_file: Path, threads: int, library: Path = None
+        config_file: Path, mash_processes: int, library: Path = None
     ) -> SearchEnvironment:
         try:
             config = toml.load(config_file)
@@ -72,7 +73,7 @@ class SearchEnvironment:
             sketch_extension=config["parameters"]["sketch_extension"],
             info_extension=config["parameters"]["info_extension"],
             thresholds=config["thresholds"],
-            threads=threads,
+            mash_processes=mash_processes,
         )
 
 
@@ -375,6 +376,71 @@ def library_paths(
     )
 
 
+def _library_shard_sort_key(
+    path: Path, library: str, extension: str
+) -> tuple[int, int | str]:
+    stem = path.name[: -len(extension)]
+    shard_suffix = stem[len(library) + 1 :]
+    if shard_suffix.isdigit():
+        return 0, int(shard_suffix)
+    return 1, shard_suffix
+
+
+def library_shard_paths(
+    library: str, search_environment: SearchEnvironment
+) -> list[tuple[Path, Path]]:
+    """
+    Resolve one logical library to one or more physical sketch+metadata shard pairs.
+    """
+    single_info, single_sketch = library_paths(library, search_environment)
+    if single_info.exists() and single_sketch.exists():
+        return [(single_info, single_sketch)]
+    if single_info.exists() != single_sketch.exists():
+        raise FileNotFoundError(
+            f"Incomplete library files for {library}: expected both {single_info.name} and {single_sketch.name}"
+        )
+
+    shard_pattern = f"{library}.*{search_environment.sketch_extension}"
+    sketch_shards = sorted(
+        search_environment.library_dir.glob(shard_pattern),
+        key=lambda p: _library_shard_sort_key(
+            p, library, search_environment.sketch_extension
+        ),
+    )
+    if not sketch_shards:
+        raise FileNotFoundError(
+            f"No sketch files found for library {library} in {search_environment.library_dir}"
+        )
+
+    shards: list[tuple[Path, Path]] = []
+    for sketch_path in sketch_shards:
+        stem = sketch_path.name[: -len(search_environment.sketch_extension)]
+        info_path = (
+            search_environment.library_dir
+            / f"{stem}{search_environment.info_extension}"
+        )
+        if not info_path.exists():
+            raise FileNotFoundError(
+                f"Missing metadata file for shard {sketch_path.name}: expected {info_path.name}"
+            )
+        shards.append((info_path, sketch_path))
+    return shards
+
+
+def _top_n_matches(matches: pl.DataFrame, n: int) -> pl.DataFrame:
+    """
+    Keep top-n rows by distance while preserving first-seen order for ties.
+    """
+    if matches.is_empty() or n <= 0:
+        return matches.head(0)
+    return (
+        matches.with_row_index(name="match_order")
+        .sort(by=["distance", "match_order"], descending=[False, False])
+        .drop("match_order")
+        .head(n)
+    )
+
+
 def run_search(
     sketch_path: Path,
     library: str,
@@ -387,31 +453,62 @@ def run_search(
     :param search_environment: search configuration
     :return: The top reference from the matching species plus the filtered matches
     """
-    library_info, library_sketches = library_paths(library, search_environment)
-    taxon_links = pl.read_parquet(
-        library_info,
-        schema={
-            "record_key": pl.Utf8,
-            "organism_code": pl.Utf8,
-            "accession": pl.Utf8,
-            "represents": pl.Int64,
-        },
+    shards = library_shard_paths(library, search_environment)
+    lineage = pl.read_parquet(search_environment.lineage_file)
+    taxon_links = pl.concat(
+        [
+            pl.read_parquet(
+                info_path,
+                schema={
+                    "record_key": pl.Utf8,
+                    "organism_code": pl.Utf8,
+                    "accession": pl.Utf8,
+                    "represents": pl.Int64,
+                },
+            )
+            for info_path, _ in shards
+        ],
+        how="vertical",
     )
     taxon_links = taxon_links.rename({"organism_code": "LinkCode"}).join(
-        pl.read_parquet(search_environment.lineage_file), on="LinkCode", how="left"
+        lineage, on="LinkCode", how="left"
     )
 
-    sample_matches = get_best_mash_matches(
-        sketch_path,
-        library_sketches,
-        search_environment.mash,
-        search_environment.num_matches[library],
-        search_environment.thresholds[library],
-        search_environment.threads,
+    n_matches = search_environment.num_matches[library]
+    max_workers = min(len(shards), max(1, search_environment.mash_processes))
+    mash_threads_per_process = 1
+
+    shard_matches: list[pl.DataFrame] = [pl.DataFrame()] * len(shards)
+
+    def run_shard(shard_idx: int, shard_sketch: Path) -> tuple[int, pl.DataFrame]:
+        return shard_idx, get_best_mash_matches(
+            sketch_path,
+            shard_sketch,
+            search_environment.mash,
+            n_matches,
+            search_environment.thresholds[library],
+            mash_threads_per_process,
+        )
+
+    if len(shards) == 1:
+        _, only_sketch = shards[0]
+        shard_matches[0] = run_shard(0, only_sketch)[1]
+    else:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [
+                executor.submit(run_shard, idx, sketch_lib)
+                for idx, (_, sketch_lib) in enumerate(shards)
+            ]
+            for future in futures:
+                idx, matches = future.result()
+                shard_matches[idx] = matches
+
+    sample_matches = _top_n_matches(
+        pl.concat(shard_matches, how="vertical"), n_matches
     )
 
     species_assignment, matches = get_most_frequent_species_match(
-        sample_matches, taxon_links, search_environment.num_matches[library]
+        sample_matches, taxon_links, n_matches
     )
 
     if not species_assignment.is_empty():
@@ -425,7 +522,7 @@ def run_search(
         )
         species_assignment = species_assignment.rename(
             {
-                "percentage": f"%_of_{search_environment.num_matches[library]}_best_matches=species"
+                "percentage": f"%_of_{n_matches}_best_matches=species"
             }
         )
 

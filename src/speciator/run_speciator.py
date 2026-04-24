@@ -96,10 +96,10 @@ def main(
             readable=True,
         ),
     ] = searchConfig.config_file,
-    library_location: Annotated[
+    library_dir: Annotated[
         Path,
         typer.Option(
-            "--library-location",
+            "--library-dir",
             "-l",
             help="Path to the library directory. By default it will be taken from the configuration file.",
             exists=True,
@@ -117,11 +117,14 @@ def main(
             case_sensitive=False,
         ),
     ] = "WARNING",
-    threads: Annotated[int, typer.Option(
-        "--threads",
-        "-t",
-        help="Set the number of threads for parallelization. This may or may not help improve performance, depending.",
-    )] = 1
+    mash_processes: Annotated[
+        int,
+        typer.Option(
+            "--mash-processes",
+            "-P",
+            help="Number of parallel Mash search processes to run (one Mash thread per process).",
+        ),
+    ] = 1
 ):
     global searchConfig
 
@@ -136,7 +139,7 @@ def main(
     logger.info(f"Initializing with log level: {log_level}")
 
     searchConfig = SearchEnvironment.from_config_file(
-        config_file, threads=threads, library=library_location
+        config_file, mash_processes=mash_processes, library=library_dir
     )
     logger.info(f"SearchEnvironment initialized: {searchConfig}")
 

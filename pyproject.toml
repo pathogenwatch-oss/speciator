@@ -17,6 +17,7 @@ dependencies = [
 [project.scripts]
 speciator-build-lib = "speciator.run_library_builder:app"
 speciator = "speciator.run_speciator:app"
+speciator-split-library = "speciator.run_split_library:app"
 speciator-select-representatives = "speciator.select_representatives:app"
 speciator-lineages = "speciator.generate_lineages:app"
 speciator-cat-parquet = "speciator.cat_lineage_parquet:app"
@@ -27,7 +28,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 
 [build-system]
-requires = ["uv_build>=0.7.20,<0.8.0"]
+requires = ["uv_build>=0.7.20"]
 build-backend = "uv_build"
 
 [tool.pixi.workspace]
