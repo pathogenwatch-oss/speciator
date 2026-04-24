@@ -13,7 +13,7 @@ def test_determine_threshold_no_adjustment_needed():
     sorted_matches = pl.DataFrame(
         {
             "distance": [0.01, 0.02, 0.03, 0.04, 0.05],
-            "len": [15, 12, 20, 18, 25],  # All species have >= 10 representatives
+            "weighted_len": [15, 12, 20, 18, 25],  # All species have >= 10 representatives
         }
     )
 
@@ -27,7 +27,7 @@ def test_determine_threshold_species_count_less_than_hit_index():
     sorted_matches = pl.DataFrame(
         {
             "distance": [0.01, 0.02, 0.03, 0.04, 0.05],
-            "len": [15, 12, 2, 18, 25],  # 3rd species has only 2 representatives
+            "weighted_len": [15, 12, 2, 18, 25],  # 3rd species has only 2 representatives
         }
     )
 
@@ -43,7 +43,7 @@ def test_determine_threshold_species_count_greater_than_hit_index():
     sorted_matches = pl.DataFrame(
         {
             "distance": [0.01, 0.02, 0.03, 0.04, 0.05],
-            "len": [15, 5, 20, 18, 25],  # 2nd species has 5 representatives
+            "weighted_len": [15, 5, 20, 18, 25],  # 2nd species has 5 representatives
         }
     )
 
@@ -57,7 +57,7 @@ def test_determine_threshold_first_hit_triggers_adjustment():
     sorted_matches = pl.DataFrame(
         {
             "distance": [0.01, 0.02, 0.03, 0.04, 0.05],
-            "len": [1, 12, 20, 18, 25],  # 1st species has only 1 representative
+            "weighted_len": [1, 12, 20, 18, 25],  # 1st species has only 1 representative
         }
     )
 
@@ -80,7 +80,7 @@ def test_determine_threshold_fewer_matches_than_threshold():
     sorted_matches = pl.DataFrame(
         {
             "distance": [0.01, 0.02, 0.03],
-            "len": [15, 12, 20],  # Only 3 matches, all with sufficient representatives
+            "weighted_len": [15, 12, 20],  # Only 3 matches, all with sufficient representatives
         }
     )
 
@@ -96,7 +96,7 @@ def test_determine_threshold_edge_case_species_count_equals_hit_index():
     sorted_matches = pl.DataFrame(
         {
             "distance": [0.01, 0.02, 0.03, 0.04, 0.05],
-            "len": [15, 12, 3, 18, 25],  # 3rd species has exactly 3 representatives
+            "weighted_len": [15, 12, 3, 18, 25],  # 3rd species has exactly 3 representatives
         }
     )
 
@@ -111,7 +111,7 @@ def test_determine_threshold_beyond_threshold():
     sorted_matches = pl.DataFrame(
         {
             "distance": [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07],
-            "len": [
+            "weighted_len": [
                 15,
                 15,
                 15,
@@ -145,7 +145,7 @@ def test_determine_threshold_vibrio_cholerae_scenario():
                 0.05,
                 0.055,
             ],
-            "len": [
+            "weighted_len": [
                 2,
                 2,
                 50,

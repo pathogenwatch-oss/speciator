@@ -49,7 +49,7 @@ def test_split_generates_shards_and_archives_in_place(monkeypatch, tmp_path: Pat
         output_dir=library_dir,
         mash_path="mash",
         overwrite=False,
-        archive_original=True,
+        keep_original=False,
     )
 
     assert (library_dir / "Bacteria.1.msh").exists()
@@ -93,7 +93,7 @@ def test_split_raises_if_sketch_missing(monkeypatch, tmp_path: Path):
             output_dir=library_dir,
             mash_path="mash",
             overwrite=False,
-            archive_original=True,
+            keep_original=True,
         )
 
 
@@ -122,7 +122,7 @@ def test_split_noop_when_library_is_small(monkeypatch, tmp_path: Path):
         output_dir=library_dir,
         mash_path="mash",
         overwrite=False,
-        archive_original=True,
+        keep_original=True,
     )
 
     assert called["paste"] == 0
