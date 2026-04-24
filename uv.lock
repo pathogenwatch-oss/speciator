@@ -2,6 +2,10 @@ version = 1
 revision = 3
 requires-python = ">=3.12"
 
+[options]
+exclude-newer = "2026-04-17T15:17:00.754774832Z"
+exclude-newer-span = "P7D"
+
 [[package]]
 name = "click"
 version = "8.2.1"
@@ -285,7 +289,7 @@ wheels = [
 
 [[package]]
 name = "speciator"
-version = "5.0.0rc3"
+version = "5.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "polars" },
