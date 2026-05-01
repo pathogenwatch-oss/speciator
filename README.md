@@ -20,7 +20,7 @@ Speciator has three primary commands:
 
 1. `speciator fasta <fasta file>` - Search a FASTA file
 2. `speciator fastq <fastq file 1> <fastq file 2>` - Search a FASTQ file
-3. `speciator build` - Build the library
+3. `speciator-build-lib` - Build the library
 
 ## Installing
 
@@ -30,7 +30,7 @@ Clone the repository to your local disk and then follow the instructions for one
 2. [uv](#using-uv) - run directly or install as a python module
 3. [docker](#using-docker) – create an image for distribution
 
-The library must be built before running Speciator for the firstm time. This can be done directly, e.g. with `uv`, or by
+The library must be built before running Speciator for the first time. This can be done directly, e.g. with `uv`, or by
 using Docker to create a code image and running the code image.
 
 ### Using pixi
@@ -191,25 +191,25 @@ Global options (apply to all subcommands):
 
 Library sharding:
 
-- `config.toml` supports `[parameters].max_sub_library_size`.
+- `speciator-build-lib --max-sub-library-size` controls build-time sharding (`0` disables).
 - When set to a value `> 0`, NCBI-derived libraries can be emitted as shards: `Bacteria.1.msh/.pqt`,
   `Bacteria.2.msh/.pqt`, etc.
 - Search automatically detects sharded libraries and aggregates shard matches before species assignment.
 
 Subcommands:
 
-- `kleborate [--version/-v VERSION] [DB_NAME]` (default version: `v3.2.4`, db name: `Kleborate`) downloads and builds
-  the Kleborate library.
-- `curated [DB_NAME] [--clean]` (default db name: `Curated`) imports curated libraries and optionally cleans added
-  files.
-- `flu [--batch-size N] [--scaling-factor F] [--max-reps N] [DB_NAME]` (defaults: `500`, `0.005`, `2000`, db name:
-  `Influenza`) builds the influenza library.
-- `ncbi [--update-metadata] [--clean] [--qc-metrics FILE] [--batch-size N] [--cluster-threshold F] [--scaling-factor F] [--max-reps N] [--skip-unclassified]`
-  (defaults: `filtered_metrics.csv`, `500`, `0.0000001`, `0.005`, `2000`, `True`) builds the NCBI-derived libraries
-  for bacteria, archaea, fungi, viruses.
+- `kleborate [--version/-v VERSION] [--db-name NAME]` (default version: `v3.2.4`, db name: `Kleborate`) downloads and
+  builds the Kleborate library.
+- `curated [--db-name NAME] [--clean/--no-clean]` (default db name: `Curated`) imports curated libraries and
+  optionally cleans added files.
+- `flu [--batch-size N] [--scaling-factor F] [--max-reps N] [--db-name NAME]` (defaults: `500`, `0.05`, `2000`,
+  db name: `Influenza`) builds the influenza library.
+- `ncbi [--update-metadata/--no-update-metadata] [--clean/--no-clean] [--qc-metrics-file FILE] [--batch-size N] [--cluster-threshold F] [--scaling-factor F] [--max-reps N] [--skip-unclassified/--no-skip-unclassified]`
+  (defaults: `filtered_metrics.csv`, `500`, `0.0001`, `0.1`, `2000`, `True`) builds the NCBI-derived libraries for
+  bacteria, archaea, fungi, viruses.
 - `full KLEBORATE_VERSION [--clean] [--qc-metrics FILE] [--batch-size N] [--ncbi-cluster-threshold F] [--ncbi-scaling-factor F] [--ncbi-max-reps N] [--ncbi-skip-unclassified] [--flu-batch-size N] [--flu-scaling-factor F] [--flu-max-reps N] [--curated-name NAME]`
-  (defaults: `filtered_metrics.csv`, `500`, `0.0001`, `0.1`, `2000`, `True`, `500`, `0.005`, `2000`, `Curated`)
-orchestrates `kleborate`, `curated`, `ncbi`, and `flu` in one run.
+  (defaults: `filtered_metrics.csv`, `500`, `0.0001`, `0.1`, `2000`, `True`, `500`, `0.05`, `2000`, `Curated`)
+  orchestrates `kleborate`, `curated`, `ncbi`, and `flu` in one run.
 
 ### Split an existing large library into sub-libraries
 
