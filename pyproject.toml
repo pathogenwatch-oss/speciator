@@ -1,6 +1,6 @@
 [project]
 name = "speciator"
-version = "5.0.0"
+version = "5.0.1"
 description = "A fast tool for assigning species to fungal, bacterial, and viral genomes.."
 readme = "README.md"
 requires-python = ">=3.12"
