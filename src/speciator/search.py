@@ -446,7 +446,7 @@ def run_search(
     sketch_path: Path,
     library: str,
     search_environment: SearchEnvironment,
-) -> tuple[None | dict[str, str | float], None | pl.DataFrame]:
+) -> tuple[dict[str, str | float] | None, pl.DataFrame]:
     """
     Run search on a single sketch
     :param sketch_path: path to the sketch
