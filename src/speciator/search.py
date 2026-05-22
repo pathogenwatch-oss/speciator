@@ -83,7 +83,7 @@ class Confidence:
     speciesCounts: dict[str, int] = field(default_factory=dict)
     consistency: float = 0.0
     diversity: int = 0
-    matches: list[dict[str, float | int]] = field(default_factory=list)
+    matches: list[dict[str, float | int | str]] = field(default_factory=list)
 
     @staticmethod
     def default_confidence() -> Confidence:
@@ -93,7 +93,7 @@ class Confidence:
     def build(species_name: str, matches: pl.DataFrame) -> Confidence:
         total_matches: int = matches.shape[0]
         if total_matches == 0:
-            return Confidence(totalMatches=0, speciesCounts={}, consistency=1)
+            return Confidence.default_confidence()
         species_counts_df = matches.group_by("OrganismName").agg(
             pl.col("adjusted_represents").sum().alias("count")
         )
@@ -105,7 +105,8 @@ class Confidence:
                 species_counts_df["count"].to_list(),
             )
         )
-        consistency: float = round(total_matches / species_counts[species_name], 2)
+        total_representatives = species_counts_df["count"].sum()
+        consistency: float = round(species_counts[species_name] / total_representatives, 2)
         diversity: int = len(species_counts)
         reduced_matches = [
             {
@@ -571,7 +572,7 @@ def assign_species(
 def format_result(
     result: dict[str, str | float], matches: pl.DataFrame, library_name: str
 ) -> SearchResult:
-    if result is None:
+    if result is None or matches is None:
         return SearchResult.default_result()
     else:
         return SearchResult(
