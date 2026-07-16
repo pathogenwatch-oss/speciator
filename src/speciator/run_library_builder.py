@@ -140,7 +140,6 @@ def kleborate(
         lineages[rep["organism_code"]].OrganismId = rep["organism_code"]
         lineages[rep["organism_code"]].OrganismName = rep["organism_name"]
 
-    # Add extra records to Kleborate
     kleborate_df = pl.read_parquet(data_paths.library_dir / f"{db_name}.pqt")
     for rep in modified_reps:
         kleborate_df = kleborate_df.with_columns(
@@ -348,21 +347,12 @@ def curated(db_name: str = "Curated", clean: bool = False) -> None:
             "source_dir": "Curated_Viridans",
             "source_name": "Viridans",
         },
-        "Added": {
-            "source_dir": data_paths.library_dir,
-            "source_name": "Added",
-        },
+        # "Added": {
+        #     "source_dir": data_paths.library_dir,
+        #     "source_name": "Added",
+        # },
     }
-    added_reps = [
-        {
-            "organism_name": "SARS-CoV-2",
-            "organism_code": "2697049",
-            "record_key": "MN908947.3.fna",
-            "file_link": "https://www.ebi.ac.uk/ena/browser/api/fasta/MN908947.3?download=true",
-            "file_name": "MN908947.3.fna",
-            "accession": "MN908947.3",
-        },
-    ]
+    added_reps = []
 
     for import_db, source_info in curated_libraries.items():
         if import_db == "Added":

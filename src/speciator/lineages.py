@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 _UNKNOWN_CODE = "99999999"
 _UNKNOWN_SPECIES_CODE = "32644"
 
+
 @dataclasses.dataclass
 class Lineage:
     """A lineage."""
@@ -39,6 +40,32 @@ class Lineage:
         names = lineage_names.split(";")
         codes = lineage_codes.split(";")
         return Lineage.build_full(link_code, names, codes, names[6], codes[6])
+
+    @staticmethod
+    def covid() -> "Lineage":
+        return Lineage.build_full(
+            "2697049",
+            [
+                "Viruses",
+                "Pisuviricota",
+                "Pisoniviricetes",
+                "Nidovirales",
+                "Coronaviridae",
+                "Betacoronavirus",
+                "Betacoronavirus pandemicum",
+            ],
+            [
+                "10239",
+                "2732408",
+                "2732506",
+                "76804",
+                "11118",
+                "694002",
+                "3418604",
+            ],
+            "SARS-CoV-2",
+            "2697049"
+        )
 
     @staticmethod
     def species_only(name: str, taxon_code: str):
