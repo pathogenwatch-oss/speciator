@@ -24,11 +24,11 @@ from speciator.mash_functions import paste_sketches, sketch_file
 from speciator.metrics import Metric, read_metrics
 from speciator.ncbi_utils import (
     Genome,
-    get_exemplars,
     mash_distances,
     read_genbank_flu,
     read_kingdom_metadata,
 )
+from speciator.representatives import get_exemplars_weighted, group_members
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -43,6 +43,30 @@ max_sub_library_size: int = 0
 data_paths: BuildSpace = BuildSpace.default()
 FLU_SPECIES = ["2955744", "2955935", "2955291", "2809131", "2955465"]
 config: dict[str, Any] = {}
+
+
+def genomes_in_exemplar_order(
+    genomes: list[Genome], exemplar_ids: list[str | int], *, attr: str
+) -> list[Genome]:
+    if len(exemplar_ids) != len({str(name) for name in exemplar_ids}):
+        raise ValueError("Duplicate exemplar ids found")
+    exemplar_order = {str(name): idx for idx, name in enumerate(exemplar_ids)}
+    ordered = sorted(
+        [
+            genome
+            for genome in genomes
+            if str(getattr(genome, attr)) in exemplar_order
+        ],
+        key=lambda genome: exemplar_order[str(getattr(genome, attr))],
+    )
+    if len(ordered) != len(exemplar_order):
+        matched = {str(getattr(genome, attr)) for genome in ordered}
+        missing = set(exemplar_order) - matched
+        raise ValueError(
+            f"Failed to match {len(missing)} exemplar ids to genomes by {attr}: "
+            + ", ".join(sorted(missing)[:10])
+        )
+    return ordered
 
 
 def move_files(source: Path, basename: str, dest: Path):
@@ -190,7 +214,7 @@ def flu(
     sketched: dict[str, Genome] = download_and_sketch(
         genomes, qc_metrics, dwnld_threads
     )
-    if len(sketched) != genomes:
+    if len(sketched) != len(genomes):
         logger.error(
             f"Not all flu genomes were downloaded: {len(sketched)}/{len(genomes)}"
         )
@@ -230,6 +254,15 @@ def flu(
             )
         else:
             nr_exemplars, nr_counts = [], [1] * len(sp_genomes)
+        if (
+            len(sp_genomes) > max_reps
+            and threshold >= config["thresholds"][db_name]
+        ):
+            raise ValueError(
+                f"Flu scaling_factor must be < 1 when species has more than max_reps genomes: "
+                f"{species} has {len(sp_genomes)} genomes, max_reps={max_reps}, "
+                f"threshold={threshold}, max threshold={config['thresholds'][db_name]}"
+            )
         while (
             len(current_genomes) > max_reps
             and threshold < config["thresholds"][db_name]
@@ -243,10 +276,8 @@ def flu(
             nr_exemplars, nr_counts = extract_exemplars(
                 batch_size, current_genomes, temp_lib, threshold, nr_counts
             )
-            exemplar_order = {name: idx for idx, name in enumerate(nr_exemplars)}
-            current_genomes = sorted(
-                [genome for genome in current_genomes if genome.name in exemplar_order],
-                key=lambda g: exemplar_order[g.name],
+            current_genomes = genomes_in_exemplar_order(
+                current_genomes, nr_exemplars, attr="name"
             )
             threshold = threshold * 2
             logger.debug(
@@ -254,16 +285,14 @@ def flu(
             )
         else:
             # Create a mapping for efficient lookup
-            reps.extend(
-                [genome for genome in sp_genomes if genome.name in nr_exemplars]
-            )
+            reps.extend(genomes_in_exemplar_order(sp_genomes, nr_exemplars, attr="name"))
             species_list.append(species)
             cluster_sizes.extend(nr_counts)
 
     db_path = data_paths.build_dir / f"{db_name}.msh"
     logger.info(f"Building library for {db_name}, starting with {len(reps)} genomes")
     if len(reps) == 0:
-        logger.exit(f"No genomes found for {db_name}")
+        raise ValueError(f"No genomes found for {db_name}")
     paste_sketches(mash, [rep.sketch_path for rep in reps], db_path)
     db_metadata = {str(species): lineages[str(species)] for species in species_list}
     data_paths.finalise_library(
@@ -293,24 +322,40 @@ def extract_exemplars(
 ) -> tuple[list[str | int], list[int]]:
     if previous_counts is None:
         previous_counts = [1] * len(current_genomes)
+    if len(previous_counts) != len(current_genomes):
+        raise ValueError(
+            f"previous_counts length ({len(previous_counts)}) does not match current_genomes ({len(current_genomes)})"
+        )
+
+    weight_by_id = {
+        str(genome.assembly_accession): int(previous_counts[idx])
+        for idx, genome in enumerate(current_genomes)
+    }
     logger.debug(f"Calculating pairwise distances for {len(current_genomes)} genomes")
 
     linked_groups = build_linked_groups(batch_size, mash_lib, threshold)
-
     mash_lib.unlink()
+
+    unknown_members = group_members(linked_groups) - set(weight_by_id)
+    if unknown_members:
+        raise ValueError(
+            "Linked groups contain ids that are not in current_genomes: "
+            + ", ".join(sorted(unknown_members)[:10])
+        )
+
     current_exemplars, current_counts = [], []
     # Select the nr representatives
     for group in linked_groups.groups:
-        input_weights = [
-            previous_counts[idx]
-            for idx, genome in enumerate(current_genomes)
-            if genome.assembly_accession in group.members
-        ]
-        group_exemplars, group_counts = get_exemplars(
-            group.scores, threshold=threshold, input_weights=input_weights
+        group_exemplars, group_counts = get_exemplars_weighted(
+            group.scores, threshold=threshold, weight_by_id=weight_by_id
         )
         current_exemplars.extend(group_exemplars)
         current_counts.extend(group_counts)
+    if sum(current_counts) != sum(previous_counts):
+        raise ValueError(
+            f"Exemplar weights do not conserve input weights: "
+            f"{sum(current_counts)} != {sum(previous_counts)}"
+        )
     return current_exemplars, current_counts
 
 
@@ -587,16 +632,8 @@ def ncbi(
                     temp_lib,
                     cluster_threshold,
                 )
-                exemplar_order = {
-                    accession: idx for idx, accession in enumerate(nr_exemplars)
-                }
-                exemplar_genomes = sorted(
-                    [
-                        genome
-                        for genome in sp_genomes
-                        if genome.assembly_accession in exemplar_order
-                    ],
-                    key=lambda g: exemplar_order[g.assembly_accession],
+                exemplar_genomes = genomes_in_exemplar_order(
+                    sp_genomes, nr_exemplars, attr="assembly_accession"
                 )
 
                 # Only do iterative refinement when there are too many reps
@@ -620,16 +657,10 @@ def ncbi(
                         nr_exemplars, nr_counts = extract_exemplars(
                             batch_size, exemplar_genomes, temp_lib, threshold, nr_counts
                         )
-                        exemplar_order = {
-                            accession: idx for idx, accession in enumerate(nr_exemplars)
-                        }
-                        exemplar_genomes = sorted(
-                            [
-                                genome
-                                for genome in exemplar_genomes
-                                if genome.assembly_accession in exemplar_order
-                            ],
-                            key=lambda g: exemplar_order[g.assembly_accession],
+                        exemplar_genomes = genomes_in_exemplar_order(
+                            exemplar_genomes,
+                            nr_exemplars,
+                            attr="assembly_accession",
                         )
                         # Exit the loop if the maximum threshold has been reached
                         if threshold == config["thresholds"][db_name]:
@@ -969,7 +1000,7 @@ def main(
         raise ValueError(f"Invalid log level: {log_level}")
     logging.basicConfig(
         level=numeric_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format="%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 

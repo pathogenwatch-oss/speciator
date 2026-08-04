@@ -134,7 +134,8 @@ def main(
         raise ValueError(f"Invalid log level: {log_level}")
     logging.basicConfig(
         level=numeric_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format="%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
     logger.info(f"Initializing with log level: {log_level}")
 

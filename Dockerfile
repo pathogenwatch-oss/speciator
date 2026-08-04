@@ -16,8 +16,15 @@ COPY --from=build /speciator/dist/speciator-*.whl /speciator/dist/
 WORKDIR /speciator
 
 RUN apt update && \
-    apt install -y curl --no-install-recommends && \
+    apt install -y curl locales tzdata --no-install-recommends && \
+    sed -i 's/^# *\(en_GB.UTF-8 UTF-8\)/\1/' /etc/locale.gen && \
+    locale-gen en_GB.UTF-8 && \
     rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_GB.UTF-8 \
+    LANGUAGE=en_GB:en \
+    LC_ALL=en_GB.UTF-8 \
+    TZ=Europe/London
 
 RUN curl -L https://github.com/marbl/Mash/releases/download/v2.3/mash-Linux64-v2.3.tar | tar xv \
     && mv mash-Linux64-v2.3/mash /usr/bin/ \

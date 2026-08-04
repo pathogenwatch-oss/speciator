@@ -69,7 +69,7 @@ def main(
         raise typer.BadParameter(f"Invalid --log-level: {log_level}")
     logging.basicConfig(
         level=numeric_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format="%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s",
         datefmt="%Y-%m-%d %H:%M:%S",
     )
 

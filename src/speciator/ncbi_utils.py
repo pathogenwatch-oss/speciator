@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Callable, Iterable, Iterator
 
 import numpy as np
-from sklearn.cluster import AgglomerativeClustering
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from speciator.build_space import BuildSpace
@@ -596,42 +595,3 @@ def mash_distances(
     for result in mash_fields(library, mash_path, [2], threshold=threshold, threads=threads):
         yield result[0], result[1], float(result[2])
 
-
-def get_exemplars(
-    scores: dict[tuple[str | int, str | int], float],
-    threshold: float,
-    input_weights: list[int] = None,
-) -> tuple[list[str | int], list[int]]:
-    if len(scores) < 1:
-        raise ValueError("No data provided to cluster.")
-
-    mapped_scores, bimap = BiMap.map_score_dict(scores)
-    matrix_size = len(bimap)
-
-    if input_weights is None:
-        input_weights = [1] * matrix_size
-
-    if matrix_size == 1:
-        return [bimap.get_name(0)], [input_weights[0]]
-
-    input_matrix = np.ones((matrix_size, matrix_size), dtype=np.float32)
-    np.fill_diagonal(input_matrix, 0)
-    for id_pair, score in mapped_scores.items():
-        input_matrix[id_pair[0]][id_pair[1]] = score
-        input_matrix[id_pair[1]][id_pair[0]] = score
-
-    # Convert scores to a distance matrix
-    # cluster to the threshold (multi-linkage)
-    clustering = AgglomerativeClustering(
-        metric="precomputed",
-        distance_threshold=threshold,
-        linkage="complete",
-        n_clusters=None,
-    ).fit(input_matrix)
-
-    # select exemplar for each cluster
-    raw_exemplars, ex_weights = select_exemplars(
-        input_matrix, clustering.labels_, input_weights
-    )
-    remapped_exemplars: list[str | int] = bimap.invert_list(raw_exemplars)
-    return remapped_exemplars, ex_weights

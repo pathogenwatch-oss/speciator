@@ -103,7 +103,8 @@ def split(
     numeric_level = getattr(logging, "INFO", None)
     logging.basicConfig(
         level=numeric_level,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format="%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
     )
 
     output_dir = output_dir if output_dir is not None else library_dir
