@@ -606,13 +606,10 @@ def ncbi(
                     f"Skipping {species} due to being one of the flu virus species: {', '.join(FLU_SPECIES)}"
                 )
                 continue
-            if (db_name := lineages[species].SuperkingdomName) is None or db_name == "":
-                logger.warning(
-                    f"Error: No superkingdom for {species} ({lineages[species].SpeciesName}): {str(lineages[species])}"
-                )
-                continue
-            # if db_name != kingdom:
-            #     raise ValueError(f"Unexpected superkingdom for {species} ({lineages[species].SpeciesName}): {str(lineages[species])}")
+            # Use the NCBI kingdom currently being imported as the library
+            # name. TaxonKit reports fungal taxa under the Eukaryota
+            # superkingdom, but the configured NCBI library is named Fungi.
+            db_name = kingdom
             temp_lib = data_paths.build_dir / f"{species}_full.msh"
             logger.info(
                 f"Building species library for {db_name} -> {species} with {len(sp_genomes)} genomes"
@@ -637,7 +634,7 @@ def ncbi(
                 )
 
                 # Only do iterative refinement when there are too many reps
-                if len(sp_genomes) > max_reps:
+                if len(exemplar_genomes) > max_reps:
                     threshold = min(
                         config["thresholds"][db_name] * scaling_factor,
                         config["thresholds"][db_name],
