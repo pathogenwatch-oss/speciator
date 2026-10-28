@@ -69,12 +69,13 @@ class Genome:
         else:
             self.organism_taxid = self.species_taxid
 
-    @retry(wait=wait_exponential(min=2, max=10), stop=stop_after_attempt(2))
+    @retry(wait=wait_exponential(multiplier=2, min=5, max=60), stop=stop_after_attempt(5))
     def download_fasta(self) -> Path:
         """Download the genome from NCBI. Names the downloaded file using self.fasta_path."""
+        base = self.url.rstrip("/")
         if not self.fasta_path.exists():
             subprocess.run(
-                f"wget -c --retry-connrefused --tries=3 --timeout=5 -O {self.fasta_path} {self.url}/{self.url.split('/')[-1]}_genomic.fna.gz",
+                f"wget -c --retry-connrefused --tries=3 --timeout=30 --waitretry=10 -O {self.fasta_path} {base}/{base.split('/')[-1]}_genomic.fna.gz",
                 shell=True,
                 check=True,
             )
